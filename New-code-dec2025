@@ -1,0 +1,89 @@
+const delay = ms => new Promise(res => setTimeout(res, ms));
+const unfollowText = 'unfollow'; // text of the unfollow button
+
+/**
+ * Smooth scroll to load more users
+ */
+async function autoScroll(step = 300, stepDelay = 50, maxScrolls = 50) {
+  let scrolls = 0;
+  while (scrolls < maxScrolls) {
+    window.scrollBy(0, step);
+    await delay(stepDelay);
+    if ((window.innerHeight + window.scrollY) >= document.body.scrollHeight) break;
+    scrolls++;
+  }
+}
+
+/**
+ * Find all visible 3-dot buttons likely for unfollow
+ * We filter by [role="button"] with "More" in aria-label or title
+ */
+function getThreeDotButtons() {
+  return Array.from(document.querySelectorAll('[role="button"]'))
+    .filter(btn => btn.offsetParent !== null) // visible
+    .filter(btn => {
+      const label = (btn.getAttribute('aria-label') || btn.getAttribute('title') || '').toLowerCase();
+      return label.includes('more') && !btn.dataset.clicked; // mark clicked later
+    });
+}
+
+/**
+ * Click the correct menu and unfollow
+ */
+async function clickAndUnfollowLoop() {
+  let totalClicked = 0;
+  let noNewFoundCounter = 0;
+
+  while (true) {
+    const threeDots = getThreeDotButtons();
+
+    if (threeDots.length === 0) {
+      noNewFoundCounter++;
+      if (noNewFoundCounter > 3) {
+        console.log("🎯 No more new 3-dot buttons found. Process completed.");
+        break;
+      }
+      await autoScroll();
+      await delay(1000);
+      continue;
+    }
+
+    noNewFoundCounter = 0;
+
+    for (const btn of threeDots) {
+      btn.dataset.clicked = "true"; // mark clicked
+
+      btn.click(); // open menu
+      await delay(1000);
+
+      // Find the menu (Facebook menus usually have role="menu")
+      const menu = document.querySelector('[role="menu"]');
+      if (!menu) {
+        console.log("⚠️ Menu did not appear, skipping button.");
+        continue;
+      }
+
+      // Look for visible Unfollow button inside menu
+      const unfollowBtn = Array.from(menu.querySelectorAll('*'))
+        .find(el => el.offsetParent !== null && el.textContent.trim().toLowerCase() === unfollowText);
+
+      if (unfollowBtn) {
+        unfollowBtn.click();
+        totalClicked++;
+        console.log(`🚫 Successfully unfollowed ${totalClicked} person(s)`);
+        await delay(500);
+      } else {
+        console.log("⚠️ No visible 'Unfollow' button in this menu, likely not a target user.");
+      }
+
+      await delay(300);
+    }
+
+    await autoScroll(200, 30);
+    await delay(700);
+  }
+
+  console.log(`✅ Unfollow process completed. Total unfollows: ${totalClicked}`);
+}
+
+clickAndUnfollowLoop();
